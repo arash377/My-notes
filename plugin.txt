@@ -1,0 +1,101 @@
+برای افزودن پلاگین در حین اجرا می‌توان از URLClassLoader استفاده کرد. در این مثال، برنامه مسیر فایل JAR و نام کلاس پلاگین را می‌گیرد و آن را بدون راه‌اندازی مجدد اجرا می‌کند.
+
+۱. قرارداد پلاگین — Plugin.java
+
+هر پلاگین باید این رابط را پیاده‌سازی کند:
+
+public interface Plugin {
+    void execute();
+}
+
+۲. برنامه اصلی — Main.java
+
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        try (Scanner scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("Plugin JAR path (or exit): ");
+                String input = scanner.nextLine().trim();
+
+                if ("exit".equalsIgnoreCase(input)) {
+                    break;
+                }
+
+                Path jarPath = Paths.get(input).toAbsolutePath();
+
+                if (!Files.isRegularFile(jarPath)) {
+                    System.out.println("JAR file not found.");
+                    continue;
+                }
+
+                System.out.print("Plugin class name: ");
+                String className = scanner.nextLine().trim();
+
+                URL[] urls;
+                try {
+                    urls = new URL[] { jarPath.toUri().toURL() };
+                } catch (Exception e) {
+                    System.out.println("Invalid path: " + e.getMessage());
+                    continue;
+                }
+
+                try (URLClassLoader loader = new URLClassLoader(
+                        urls, Plugin.class.getClassLoader())) {
+
+                    Class<?> loadedClass = loader.loadClass(className);
+
+                    Class<? extends Plugin> pluginClass =
+                            loadedClass.asSubclass(Plugin.class);
+
+                    Plugin plugin =
+                            pluginClass.getDeclaredConstructor().newInstance();
+
+                    plugin.execute();
+
+                } catch (Exception | LinkageError e) {
+                    System.out.println("Plugin error: " + e);
+                }
+            }
+        }
+    }
+}
+
+۳. پلاگین نمونه — HelloPlugin.java
+
+public class HelloPlugin implements Plugin {
+    @Override
+    public void execute() {
+        System.out.println("Hello from the plugin!");
+    }
+}
+
+۴. کامپایل و اجرا
+
+سه فایل را در یک پوشه قرار دهید. ابتدا برنامه اصلی را کامپایل و اجرا کنید:
+
+mkdir app
+javac -d app Plugin.java Main.java
+java -cp app Main
+
+وقتی برنامه در انتظار ورودی است، در ترمینال دیگری پلاگین را بسازید:
+
+mkdir plugin-build
+javac -cp app -d plugin-build HelloPlugin.java
+jar cf hello-plugin.jar -C plugin-build .
+
+حالا در برنامه در حال اجرا وارد کنید:
+
+Plugin JAR path (or exit): hello-plugin.jar
+Plugin class name: HelloPlugin
+Hello from the plugin!
+
+پلاگین‌های بعدی نیز با همین روش بارگذاری می‌شوند. فایل JAR پلاگین فقط باید شامل پیاده‌سازی پلاگین باشد؛ رابط Plugin از برنامه اصلی دریافت می‌شود.
+
+این نمونه پلاگین را بارگذاری و بلافاصله اجرا می‌کند. فقط پلاگین‌های مورد اعتماد را بارگذاری کنید، چون کد آن‌ها با دسترسی‌های برنامه اصلی اجرا می‌شود.
